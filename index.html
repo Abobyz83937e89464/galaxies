@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Космическая Локальная Группа</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        canvas { display: block; }
+        #info {
+            position: absolute; top: 10px; left: 10px;
+            color: rgba(255, 255, 255, 0.7); font-family: sans-serif;
+            pointer-events: none; text-shadow: 1px 1px 2px black; font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Спиральные галактики и звездная пыль | Управление: Мышь / Тач</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.0012);
+
+        // Камера с защитой от отсечения при близком зуме (near = 0.1, far = 10000)
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+        camera.position.set(0, 250, 450);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        const galaxies = [];
+
+        function createGalaxy(x, y, z, particleCount, size, centerColor, edgeColor, spinSpeed, branches, spin, randomness) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+
+            const colorInside = new THREE.Color(centerColor);
+            const colorOutside = new THREE.Color(edgeColor);
+
+            for (let i = 0; i < particleCount; i++) {
+                const radius = Math.random() * size;
+                const spinAngle = radius * spin;
+                const branchAngle = ((i % branches) / branches) * Math.PI * 2;
+
+                const randomX = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * randomness * radius;
+                const randomY = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * randomness * radius * 0.3;
+                const randomZ = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * randomness * radius;
+
+                positions[i * 3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
+                positions[i * 3 + 1] = randomY;
+                positions[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
+
+                const mixedColor = colorInside.clone();
+                mixedColor.lerp(colorOutside, radius / size);
+
+                colors[i * 3] = mixedColor.r;
+                colors[i * 3 + 1] = mixedColor.g;
+                colors[i * 3 + 2] = mixedColor.b;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.25,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const points = new THREE.Points(geometry, material);
+            points.position.set(x, y, z);
+            
+            points.rotation.x = (Math.random() - 0.5) * 0.5;
+            points.rotation.z = (Math.random() - 0.5) * 0.5;
+
+            scene.add(points);
+            galaxies.push({ mesh: points, speed: spinSpeed, type: 'galaxy' });
+        }
+
+        function createSpaceDust(particleCount, spaceSize) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const color = new THREE.Color();
+
+            for (let i = 0; i < particleCount; i++) {
+                const u = Math.random();
+                const v = Math.random();
+                const theta = u * 2.0 * Math.PI;
+                const phi = Math.acos(2.0 * v - 1.0);
+                const r = Math.cbrt(Math.random()) * spaceSize; 
+
+                positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                positions[i * 3 + 2] = r * Math.cos(phi);
+
+                const rand = Math.random();
+                if (rand < 0.6) color.setHex(0x444444);      
+                else if (rand < 0.9) color.setHex(0x224466); 
+                else color.setHex(0xaaaaaa);                 
+
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.3,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+
+            const points = new THREE.Points(geometry, material);
+            scene.add(points);
+            
+            galaxies.push({ mesh: points, speed: 0.002, type: 'dust' });
+        }
+
+        createGalaxy(0, 0, 0, 60000, 100, 0xffddaa, 0x0044ff, 0.015, 4, 0.03, 0.4);
+        createGalaxy(280, 50, -180, 80000, 140, 0xffffff, 0xaa22ff, 0.01, 2, 0.05, 0.3);
+        createGalaxy(-220, -40, 120, 30000, 70, 0xddee88, 0x00aaff, 0.02, 3, 0.02, 0.6);
+        createSpaceDust(30000, 800);
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            galaxies.forEach(obj => {
+                if(obj.type === 'galaxy') {
+                    obj.mesh.rotation.y -= obj.speed * delta; 
+                } else {
+                    obj.mesh.rotation.y += obj.speed * delta; 
+                    obj.mesh.rotation.x += obj.speed * 0.5 * delta;
+                }
+            });
+
+            // ФИКС ЗУМА: Динамически толкаем фокусную точку вперед
+            const minZoomDist = 150; 
+            if (camera.position.distanceTo(controls.target) < minZoomDist) {
+                const dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                controls.target.copy(camera.position).add(dir.multiplyScalar(minZoomDist));
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
